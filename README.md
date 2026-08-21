@@ -1,5 +1,5 @@
-# linux-resmon.py
-A python equivalent of the Windows Resource Monitor (resmon.exe), for Linux
+# linux_resmon
+The Linux Resource Monitor, a standalone python equivalent of the Windows Resource Monitor (resmon.exe) - part of the Linspector Suite ecosystem.
 
 Hello, world!
 
