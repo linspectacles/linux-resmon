@@ -1,4 +1,4 @@
-# linux_resmon
+# LinSpectacles | Resource Monitor
 The Linux Resource Monitor, a python equivalent of the Windows Resource Monitor (resmon.exe) | Standalone applet for the Linspector Suite ecosystem.
 
 Hello, world!
