@@ -1,0 +1,334 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+# LinSpectacles Resource Monitor - privileged read-only collector
+# Copyright (C) 2026 brunonlinespace
+# GPL-3.0-or-later
+
+"""Root-side collector for optional Resource Monitor privileged mode.
+
+This helper intentionally has no generic file-read or command-execution API.
+It exposes only a fixed set of read-only /proc inspections over JSON lines.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import socket
+import struct
+import sys
+from pathlib import Path
+
+TCP_STATES = {
+    "01": "ESTABLISHED", "02": "SYN_SENT", "03": "SYN_RECV", "04": "FIN_WAIT1",
+    "05": "FIN_WAIT2", "06": "TIME_WAIT", "07": "CLOSE", "08": "CLOSE_WAIT",
+    "09": "LAST_ACK", "0A": "LISTEN", "0B": "CLOSING", "0C": "NEW_SYN_RECV",
+}
+MAX_ROWS = 20000
+
+
+def reply(payload):
+    sys.stdout.write(json.dumps(payload, separators=(",", ":"), ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def valid_pid(value):
+    try:
+        pid = int(value)
+    except (TypeError, ValueError):
+        raise ValueError("PID must be an integer")
+    if pid <= 0 or pid > 4194304:
+        raise ValueError("PID is out of range")
+    return pid
+
+
+def process_name(pid):
+    try:
+        return Path(f"/proc/{pid}/comm").read_text(errors="replace").strip() or str(pid)
+    except OSError:
+        return str(pid)
+
+
+def _fd_type(target):
+    target = str(target)
+    if target.startswith("socket:["):
+        return "socket"
+    if target.startswith("pipe:["):
+        return "pipe"
+    if target.startswith("anon_inode:"):
+        detail = target.split("[", 1)[-1].rstrip("]")
+        return detail[:24] or "anon_inode"
+    if target.startswith("/"):
+        try:
+            return "dir" if os.path.isdir(target.replace(" (deleted)", "")) else "file"
+        except OSError:
+            return "file"
+    return "other"
+
+
+def _fd_flags(pid, fd):
+    try:
+        for line in Path(f"/proc/{pid}/fdinfo/{fd}").read_text(errors="replace").splitlines():
+            if line.startswith("flags:"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return ""
+
+
+def handles(pid):
+    pid = valid_pid(pid)
+    root = Path(f"/proc/{pid}/fd")
+    rows = []
+    for item in sorted(root.iterdir(), key=lambda p: int(p.name) if p.name.isdigit() else 10**9):
+        if len(rows) >= MAX_ROWS:
+            break
+        try:
+            target = os.readlink(item)
+        except OSError as exc:
+            target = f"<unavailable: {exc.strerror or exc}>"
+        rows.append({"fd": item.name, "type": _fd_type(target), "flags": _fd_flags(pid, item.name), "target": target})
+    return rows
+
+
+def modules(pid):
+    pid = valid_pid(pid)
+    paths = {}
+    with open(f"/proc/{pid}/maps", "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            parts = line.rstrip("\n").split(None, 5)
+            if len(parts) < 6:
+                continue
+            address, perms, offset, dev, inode, path = parts
+            if not path.startswith("/"):
+                continue
+            if path not in paths:
+                paths[path] = {"path": path, "perms": perms, "address": address}
+            if len(paths) >= MAX_ROWS:
+                break
+    return list(paths.values())
+
+
+def _parse_kib_fields(lines):
+    values = {}
+    for line in lines:
+        key, sep, rest = line.partition(":")
+        if not sep:
+            continue
+        fields = rest.strip().split()
+        if not fields:
+            continue
+        try:
+            value = int(fields[0])
+        except ValueError:
+            continue
+        if len(fields) > 1 and fields[1].lower() == "kb":
+            value *= 1024
+        values[key] = value
+    return values
+
+
+def process_memory_summary(pid):
+    """Return the fixed smaps_rollup attribution for one validated PID."""
+    pid = valid_pid(pid)
+    path = Path(f"/proc/{pid}/smaps_rollup")
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    # The first line is the aggregate address range rather than a Key: value.
+    return _parse_kib_fields(lines[1:] if lines else lines)
+
+
+def process_memory_map(pid):
+    """Return structured /proc/<pid>/smaps mappings for one validated PID."""
+    pid = valid_pid(pid)
+    rows = []
+    current = None
+    tracked = {
+        "Rss", "Pss", "Private_Clean", "Private_Dirty", "Private_Hugetlb",
+        "Shared_Clean", "Shared_Dirty", "Shared_Hugetlb", "Swap",
+    }
+    with Path(f"/proc/{pid}/smaps").open("r", encoding="utf-8", errors="replace") as fh:
+        for raw in fh:
+            line = raw.rstrip("\n")
+            parts = line.split(None, 5)
+            is_header = (
+                len(parts) >= 5
+                and "-" in parts[0]
+                and len(parts[1]) == 4
+                and parts[1][0] in "r-"
+            )
+            if is_header:
+                if current is not None:
+                    rows.append(current)
+                    if len(rows) >= MAX_ROWS:
+                        break
+                current = {
+                    "address": parts[0],
+                    "perms": parts[1],
+                    "path": parts[5] if len(parts) > 5 else "[anonymous]",
+                    "Rss": 0, "Pss": 0,
+                    "Private_Clean": 0, "Private_Dirty": 0, "Private_Hugetlb": 0,
+                    "Shared_Clean": 0, "Shared_Dirty": 0, "Shared_Hugetlb": 0,
+                    "Swap": 0,
+                }
+                continue
+            if current is None:
+                continue
+            key, sep, rest = line.partition(":")
+            if not sep or key not in tracked:
+                continue
+            fields = rest.strip().split()
+            if not fields:
+                continue
+            try:
+                value = int(fields[0])
+            except ValueError:
+                continue
+            if len(fields) > 1 and fields[1].lower() == "kb":
+                value *= 1024
+            current[key] = value
+    if current is not None and len(rows) < MAX_ROWS:
+        rows.append(current)
+    return rows[:MAX_ROWS]
+
+
+def _decode_ipv4(raw):
+    packed = struct.pack("<I", int(raw, 16))
+    return socket.inet_ntop(socket.AF_INET, packed)
+
+
+def _decode_ipv6(raw):
+    data = bytes.fromhex(raw)
+    # /proc/net/tcp6 stores each 32-bit word little-endian.
+    data = b"".join(data[i:i+4][::-1] for i in range(0, 16, 4))
+    return socket.inet_ntop(socket.AF_INET6, data)
+
+
+def _decode_endpoint(token, ipv6=False):
+    addr_hex, port_hex = token.split(":", 1)
+    addr = _decode_ipv6(addr_hex) if ipv6 else _decode_ipv4(addr_hex)
+    return addr, int(port_hex, 16)
+
+
+def _socket_inode_map():
+    mapping = {}
+    proc = Path("/proc")
+    for pdir in proc.iterdir():
+        if not pdir.name.isdigit():
+            continue
+        pid = int(pdir.name)
+        fdroot = pdir / "fd"
+        try:
+            entries = list(fdroot.iterdir())
+        except OSError:
+            continue
+        pname = process_name(pid)
+        for fd in entries:
+            try:
+                target = os.readlink(fd)
+            except OSError:
+                continue
+            if target.startswith("socket:[") and target.endswith("]"):
+                inode = target[8:-1]
+                mapping.setdefault(inode, (pid, pname))
+    return mapping
+
+
+def _read_net_table(path, protocol, ipv6, inode_map):
+    rows = []
+    try:
+        lines = Path(path).read_text(errors="replace").splitlines()[1:]
+    except OSError:
+        return rows
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 10:
+            continue
+        try:
+            local = _decode_endpoint(parts[1], ipv6)
+            remote = _decode_endpoint(parts[2], ipv6)
+            state_hex = parts[3]
+            inode = parts[9]
+        except Exception:
+            continue
+        pid, name = inode_map.get(inode, (0, "System/Kernel"))
+        state = TCP_STATES.get(state_hex, state_hex) if protocol == "TCP" else "NONE"
+        rows.append({
+            "pid": pid,
+            "name": name,
+            "local_ip": local[0], "local_port": local[1],
+            "remote_ip": remote[0], "remote_port": remote[1],
+            "status": state, "protocol": protocol, "inode": inode,
+        })
+        if len(rows) >= MAX_ROWS:
+            break
+    return rows
+
+
+def net_connections():
+    inode_map = _socket_inode_map()
+    rows = []
+    specs = (
+        ("/proc/net/tcp", "TCP", False), ("/proc/net/tcp6", "TCP", True),
+        ("/proc/net/udp", "UDP", False), ("/proc/net/udp6", "UDP", True),
+    )
+    for path, protocol, ipv6 in specs:
+        rows.extend(_read_net_table(path, protocol, ipv6, inode_map))
+        if len(rows) >= MAX_ROWS:
+            break
+    rows.sort(key=lambda r: (r["name"].lower(), r["pid"], r["protocol"], r["local_port"]))
+    return rows[:MAX_ROWS]
+
+
+def dispatch(req):
+    op = req.get("op")
+    if op == "ping":
+        return {"ok": True, "root": os.geteuid() == 0}
+    if op == "process_handles":
+        return {"ok": True, "rows": handles(req.get("pid"))}
+    if op == "process_modules":
+        return {"ok": True, "rows": modules(req.get("pid"))}
+    if op == "process_memory_summary":
+        return {"ok": True, "values": process_memory_summary(req.get("pid"))}
+    if op == "process_memory_map":
+        return {"ok": True, "rows": process_memory_map(req.get("pid"))}
+    if op == "net_connections":
+        return {"ok": True, "rows": net_connections()}
+    if op == "quit":
+        return {"ok": True, "quit": True}
+    raise ValueError("Unsupported operation")
+
+
+def stdio_server():
+    if os.geteuid() != 0:
+        reply({"status": "error", "error": "helper must run as root"})
+        return 1
+    reply({"status": "ready", "protocol": 1})
+    for line in sys.stdin:
+        if len(line) > 65536:
+            reply({"ok": False, "error": "request too large"})
+            continue
+        try:
+            req = json.loads(line)
+            if not isinstance(req, dict):
+                raise ValueError("request must be an object")
+            out = dispatch(req)
+        except Exception as exc:
+            out = {"ok": False, "error": str(exc)}
+        reply(out)
+        if out.get("quit"):
+            break
+    return 0
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--stdio", action="store_true")
+    args = parser.parse_args(argv)
+    if not args.stdio:
+        return 2
+    return stdio_server()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
