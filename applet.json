@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "id": "linspectacles-linux-resmon",
+  "name": "Resource Monitor",
+  "version": "1.0.2",
+  "author": "brunonlinespace",
+  "editor": "brunonlinespace",
+  "publisher": "brunonlinespace",
+  "order": 0,
+  "entrypoint": "applet.py",
+  "factory": "create_applet",
+  "standalone": "standalone.py",
+  "tui_entrypoint": "tui_applet.py",
+  "tui_factory": "create_tui_applet",
+  "standalone_tui": "standalone_tui.py",
+  "description": "Read-only live CPU, memory, disk and network monitor with configurable provider-backed Overview cards, movable/persistently lockable resource tabs, Quadrants/Strips Overview layout, Linux-native deep Processes/Physical Memory views, additive provenance-coloured optional privilege, standard Helper/Sources/About Options, and a parallel detailed TUI.",
+  "platforms": [
+    "linux"
+  ],
+  "read_only": true,
+  "python_dependencies": [
+    "psutil"
+  ],
+  "privileged_optional": true,
+  "privileged_default": false,
+  "privileged_helper": {
+    "schema": 1,
+    "id": "linspectacles-linux-resmon",
+    "name": "Resource Monitor Privileged Helper",
+    "version": "1.0.0",
+    "protocol": 1,
+    "publisher": "brunonlinespace",
+    "payload": "privileged/linspectacles-linux-resmon-helper",
+    "install_path": "/usr/libexec/linspectacles-linux-resmon-helper",
+    "sha256": "e093aae6a4cde2d5e57aedcea5f2cf23cd2638d574a3ed80c9b47ba2ee392895",
+    "session_model": "in_place_ephemeral",
+    "read_only": true,
+    "capabilities": [
+      {
+        "id": "process_handles",
+        "label": "Process file-descriptor targets",
+        "kind": "expanded",
+        "standard": "Readable for processes permitted by the current user and Linux /proc access controls.",
+        "elevated": "The fixed root helper can enumerate file-descriptor targets for otherwise restricted processes."
+      },
+      {
+        "id": "process_modules",
+        "label": "Process mapped module/file paths",
+        "kind": "expanded",
+        "standard": "Mapped files/modules are visible only where ordinary process-map access is permitted.",
+        "elevated": "The fixed root helper can enumerate mapped module/file paths for otherwise restricted processes."
+      },
+      {
+        "id": "process_memory",
+        "label": "Selected-process memory attribution and map",
+        "kind": "expanded",
+        "standard": "smaps_rollup and smaps are read only when Linux permits the current user to inspect the selected process.",
+        "elevated": "The fixed root helper can read only the selected PID smaps_rollup/smaps data when ordinary access is restricted."
+      },
+      {
+        "id": "net_connections",
+        "label": "System socket ownership visibility",
+        "kind": "expanded",
+        "standard": "Socket/process ownership is reported where psutil and ordinary /proc visibility permit it.",
+        "elevated": "The fixed root helper can correlate system socket inodes with process file descriptors across restricted processes."
+      }
+    ]
+  },
+  "frontends": [
+    "gui",
+    "tui"
+  ],
+  "organization_id": "linspectacles",
+  "organization_url": "https://github.com/linspectacles/",
+  "repository": "https://github.com/linspectacles/linux-resmon"
+}
