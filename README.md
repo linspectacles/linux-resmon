@@ -14,7 +14,7 @@
 
 Resource Monitor is a read-only live CPU, memory, disk and network monitor with Linux-native detail views, optional helper-backed visibility, a configurable Overview and a parallel TUI.
 
-Current release: **1.0.5**
+Current release: **1.0.7**
 
 Repository: <https://github.com/linspectacles/linux-resmon>
 
@@ -94,12 +94,21 @@ The applet source is contained in:
 
 ```text
 linspectacles_linux_resmon/
-├── applet.json
-├── applet.py
-├── standalone.py
-├── icon.png
+├── README.md
 ├── LICENSE
-└── ... applet-specific modules where present
+├── __init__.py
+├── applet.json
+├── standalone.py
+├── standalone_tui.py
+└── linux_resmon/
+    ├── applet.py
+    ├── tui_applet.py
+    ├── privilege.py
+    ├── privileged/
+    ├── icon.png
+    ├── README.md
+    ├── CHANGELOG.md
+    └── ... applet-specific modules where present
 ```
 
 `applet.json` supplies the LinSpectacles applet identity and entrypoint metadata. `standalone.py` launches the applet directly, while the package's applet factory provides the host-loadable LinSpectacles integration used by the source.

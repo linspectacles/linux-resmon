@@ -1,4 +1,4 @@
-# Resource Monitor 1.0.5
+# Resource Monitor 1.0.7
 
 Resource Monitor remains usable standalone while retaining the GUI/TUI applet contracts needed for LinSpectacles integration. Version **1.0.0** is an identity-only migration from the frozen `0.0.11-exp2-r7` implementation: Resource Monitor behavior is unchanged.
 

@@ -1,17 +1,13 @@
-## 1.0.5
+## 1.0.7
 
-- Give all GUI tabs fully rounded corners while keeping the tab pane borderless.
-- Bind Ctrl+Tab / Ctrl+Shift+Tab explicitly to next / previous main resource tab.
+Pre-official branch resumed from `1.0.3-exp2`.
 
-## 1.0.3
-
-
-## 1.0.4
-
-- Removed the outer frame around the main GUI resource tab pane. Individual Overview cards, tables, and other widget boundaries are unchanged.
-
-- Pre-official theming check: adopts the same automatic dark/light Qt colour-scheme system used by LinSpectacles Kernel Modules 1.0.5-exp1.
-- Adds the approved locked public README at the applet source root; its content is unchanged apart from the release version.
+- Adds the descriptive repository-root `README.md`; this root README is locked from this release onward and may only receive version-number updates unless explicitly requested otherwise.
+- Removes the main GUI tab-pane border.
+- Gives the existing dark-theme main tabs fully rounded corners.
+- Adds explicit `Ctrl+Tab` / `Ctrl+Shift+Tab` next/previous main-tab cycling in current visual order.
+- Does not include the later adaptive dark/light theming experiment.
+- No other Resource Monitor behavior is changed.
 
 ## 1.0.3-exp2
 

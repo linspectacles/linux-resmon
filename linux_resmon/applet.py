@@ -78,20 +78,9 @@ except ImportError:  # standalone.py imports this module through the package roo
         remove_helper,
     )
 
-try:
-    from ._support import (
-        adaptive_stylesheet, adaptive_theme_palette, install_adaptive_app_theme,
-        system_prefers_dark,
-    )
-except ImportError:
-    from _support import (
-        adaptive_stylesheet, adaptive_theme_palette, install_adaptive_app_theme,
-        system_prefers_dark,
-    )
-
 APPLET_ID = "linspectacles-linux-resmon"
 APPLET_NAME = "Resource Monitor"
-APPLET_VERSION = "1.0.5"
+APPLET_VERSION = "1.0.7"
 APPLET_AUTHOR = "brunonlinespace"
 APPLET_EDITOR = "brunonlinespace"
 APPLET_PUBLISHER = "brunonlinespace"
@@ -105,26 +94,12 @@ APPLET_REPOSITORY = "https://github.com/linspectacles/linux-resmon"
 PRIVILEGED_ACCENT = "#d6a23d"
 PRIVILEGED_ACCENT_LIGHT = "#f2d18b"
 PRIVILEGED_DATA = "#e5bd70"
-PRIVILEGED_DATA_LIGHT = "#8a6500"
 PRIVILEGED_DEEP = "#6a4b0c"
-
-
-def _privileged_data_color():
-    return PRIVILEGED_DATA if system_prefers_dark() else PRIVILEGED_DATA_LIGHT
-
-
-def _privilege_active_qss(dark):
-    if dark:
-        return (
-            "QPushButton { background: #6a4b0c; color: #fff4d2; "
-            "border: 1px solid #d6a23d; border-radius: 4px; padding: 5px 10px; font-weight: 600; } "
-            "QPushButton:hover { border-color: #f2c96d; }"
-        )
-    return (
-        "QPushButton { background: #f6e5b9; color: #6a4b0c; "
-        "border: 1px solid #b88418; border-radius: 4px; padding: 5px 10px; font-weight: 600; } "
-        "QPushButton:hover { background: #f0d994; border-color: #8a6500; }"
-    )
+PRIVILEGE_ACTIVE_QSS = (
+    "QPushButton { background: #6a4b0c; color: #fff4d2; "
+    "border: 1px solid #d6a23d; border-radius: 4px; padding: 5px 10px; font-weight: 600; } "
+    "QPushButton:hover { border-color: #f2c96d; }"
+)
 
 
 SOURCES_TEXT = """Resource Monitor is read-only. It combines psutil with fixed Linux interfaces and fixed systemd queries; it does not write to the inspected interfaces.
@@ -367,7 +342,7 @@ def _fill_table(
     privileged_rows = set(privileged_rows or ())
     table.setSortingEnabled(False)
     table.setRowCount(len(rows))
-    privileged_brush = QBrush(QColor(_privileged_data_color())) if privileged_rows else None
+    privileged_brush = QBrush(QColor(PRIVILEGED_DATA)) if privileged_rows else None
     for r, row in enumerate(rows):
         for c, value in enumerate(row):
             if c in numeric_cols:
@@ -603,19 +578,18 @@ class ResMonOptionsDialog(QDialog):
         if chosen is not None:
             t.setFont(chosen); t.document().setDefaultFont(chosen); t.setCurrentFont(chosen)
             font_rule = _font_qss(chosen)
-        theme = getattr(owner, "_theme", adaptive_theme_palette(system_prefers_dark()))
         t.setStyleSheet(
             "QTextEdit { "
             + font_rule
-            + f" background-color: {theme['metadata_bg']}; color: {theme['text']}; "
-              f"border: 1px solid {theme['border']}; }}"
+            + " background-color: #151719; color: #dcdcdc; "
+              "border: 1px solid #333333; }"
         )
 
         source_key_format = QTextCharFormat()
-        source_key_format.setForeground(QColor(theme["source_key"]))
+        source_key_format.setForeground(QColor("#9cdcfe"))
         source_key_format.setFontWeight(600)
         source_value_format = QTextCharFormat()
-        source_value_format.setForeground(QColor(theme["text"]))
+        source_value_format.setForeground(QColor("#dcdcdc"))
 
         cursor = t.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
@@ -695,11 +669,15 @@ class ResMonOptionsDialog(QDialog):
         license_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         about_layout.addWidget(license_label)
 
-        license_url = QUrl.fromLocalFile(str(Path(__file__).resolve().parent / "LICENSE")).toString()
+        applet_root = Path(__file__).resolve().parent.parent
+        readme_url = QUrl.fromLocalFile(str(applet_root / "README.md")).toString()
+        license_url = QUrl.fromLocalFile(str(applet_root / "LICENSE")).toString()
         links = QLabel(
-            f"<a href='{APPLET_REPOSITORY}'>GitHub Repository</a> "
+            f"<a href='{readme_url}'>README</a> "
             "&nbsp;·&nbsp; "
-            f"<a href='{license_url}'>License</a>"
+            f"<a href='{license_url}'>License</a> "
+            "&nbsp;·&nbsp; "
+            f"<a href='{APPLET_REPOSITORY}'>Repository</a>"
         )
         links.setOpenExternalLinks(True)
         links.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -811,8 +789,6 @@ class ResMonWidget(QWidget):
 
     def __init__(self, parent=None, start_active=False):
         super().__init__(parent)
-        self._theme_dark = system_prefers_dark()
-        self._theme = adaptive_theme_palette(self._theme_dark)
         self.proc_cache = {}
         self.prev_proc_io = {}
         self.prev_disk_io = {}
@@ -932,11 +908,6 @@ class ResMonWidget(QWidget):
         self.tabs.currentChanged.connect(self._tab_changed)
         self._sync_view_combo()
         self._setup_shortcuts()
-        self._apply_system_theme(force=True)
-        try:
-            QApplication.instance().styleHints().colorSchemeChanged.connect(self._on_color_scheme_changed)
-        except Exception:
-            pass
 
         if psutil is None:
             self.priv_button.setEnabled(False)
@@ -951,18 +922,6 @@ class ResMonWidget(QWidget):
             self.set_monitoring_active(True)
         else:
             self._update_privilege_ui()
-
-    def _on_color_scheme_changed(self, *_args):
-        self._apply_system_theme(force=False)
-
-    def _apply_system_theme(self, force=False):
-        dark = system_prefers_dark()
-        if not force and dark == getattr(self, "_theme_dark", None):
-            return
-        self._theme_dark = dark
-        self._theme = adaptive_theme_palette(dark)
-        self.setStyleSheet(adaptive_stylesheet(dark))
-        self._update_privilege_ui()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -1602,6 +1561,11 @@ class ResMonWidget(QWidget):
         for name, direction in (("Up", "up"), ("Down", "down"), ("Left", "left"), ("Right", "right")):
             button = QPushButton(name)
             button.setFixedWidth(60)
+            button.setStyleSheet(
+                "QPushButton:disabled { "
+                "color: #777777; background-color: #252525; border: 1px solid #3f3f3f; "
+                "}"
+            )
             button.clicked.connect(lambda _checked=False, k=key, d=direction: self._move_overview_card(k, d))
             header.addWidget(button)
             buttons[direction] = button
@@ -2072,18 +2036,15 @@ class ResMonWidget(QWidget):
 
     def _update_privilege_ui(self):
         state = self.privilege.state
-        normal_status_qss = f"background: transparent; color: {self._theme['text']};"
-        if self._theme_dark:
-            privileged_status_qss = "background: #3a2d13; color: #f2d18b;"
-        else:
-            privileged_status_qss = "background: #fff3d6; color: #6a4b0c;"
+        normal_status_qss = "background: transparent; color: #dcdcdc;"
+        privileged_status_qss = "background: #3a2d13; color: #f2d18b;"
 
         # Kernel Ring Buffer authority: the button is the top-row privilege
         # control; prose/status is a plain italic bottom status surface.
         if state == "on" and self.privilege.enabled:
             self.priv_button.setText("Privileged: On")
             self.priv_button.setEnabled(True)
-            self.priv_button.setStyleSheet(_privilege_active_qss(self._theme_dark))
+            self.priv_button.setStyleSheet(PRIVILEGE_ACTIVE_QSS)
             self.priv_status.setText("Expanded read-only visibility · amber data = privileged source")
             self.priv_status.setStyleSheet(privileged_status_qss)
         elif state == "connecting":
@@ -3762,7 +3723,7 @@ class ResMonWidget(QWidget):
 
         table.setSortingEnabled(False)
         table.setRowCount(len(display_rows))
-        privileged_brush = QBrush(QColor(_privileged_data_color())) if privileged_rows else None
+        privileged_brush = QBrush(QColor(PRIVILEGED_DATA)) if privileged_rows else None
         for r, row in enumerate(display_rows):
             identity = identities[r] if r < len(identities) else None
             for c, value in enumerate(row):
@@ -3973,7 +3934,11 @@ def run_standalone():
     if icon_path.is_file():
         app.setWindowIcon(QIcon(str(icon_path)))
 
-    install_adaptive_app_theme(app)
+    try:
+        from ._support import STANDALONE_STYLESHEET
+    except ImportError:
+        from _support import STANDALONE_STYLESHEET
+    app.setStyleSheet(STANDALONE_STYLESHEET)
     app.setQuitOnLastWindowClosed(True)
 
     window = QMainWindow()
