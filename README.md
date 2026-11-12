@@ -134,7 +134,7 @@ GNU General Public License v3.0 or later. See [`linspectacles_linux_resmon/LICEN
 <p align="center">
   <a href="https://github.com/linspectacles/linux-resmon">
     <img
-      src="linspectacles_linux_resmon/linux_resmon/icon.png"
+      src="linux_resmon/icon.png"
       alt="Resource Monitor"
       width="256"
     >
