@@ -123,7 +123,7 @@ Resource Monitor is intentionally specialist. Related Linux information that bel
 
 ## License
 
-GNU General Public License v3.0 or later. See [`linspectacles_linux_resmon/LICENSE`](linspectacles_linux_resmon/LICENSE).
+GNU General Public License v3.0 or later. See [`LICENSE`](LICENSE).
 
 ## Links
 
