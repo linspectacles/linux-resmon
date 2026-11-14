@@ -1,13 +1,3 @@
-<p align="center">
-  <a href="https://github.com/brunonlinespace/brunonlinespace/blob/main/linspectacles/linux-resmon.png">
-    <img
-      src="https://raw.githubusercontent.com/brunonlinespace/brunonlinespace/main/linspectacles/linux-resmon.png"
-      alt="Resource Monitor screenshot"
-      width="900"
-    >
-  </a>
-</p>
-
 # Resource Monitor
 
 **Expose. Explore. Explain.**
@@ -18,6 +8,16 @@ Current release: **1.0.7**
 
 Repository: <https://github.com/linspectacles/linux-resmon>
 
+<p align="center">
+  <a href="https://github.com/brunonlinespace/brunonlinespace/blob/main/linspectacles/linux-resmon.png">
+    <img
+      src="https://raw.githubusercontent.com/brunonlinespace/brunonlinespace/main/linspectacles/linux-resmon.png"
+      alt="Resource Monitor screenshot"
+      width="900"
+    >
+  </a>
+</p>
+
 ## What Resource Monitor is
 
 Resource Monitor answers a focused question: **what resources are active right now, which processes/services/sockets are involved, and what does Linux report between refresh samples?**
@@ -26,7 +26,7 @@ Resource Monitor is inspired in part by the **Windows Resource Monitor (`resmon.
 
 Its design was also informed by several **Microsoft Sysinternals** utilities: **Process Explorer** for process/service context, **Handle / ListDLLs** for associated handles and mapped modules, **TCPView** for socket-oriented network inspection, and **RAMMap / VMMap** for deeper memory views. Those ideas are adapted to Linux-native interfaces and semantics rather than reproduced one-for-one.
 
-It keeps acquisition and interpretation close to the Linux interfaces actually used by the applet. When a source is unavailable, restricted, or does not report a field, the README does not imply that the applet can manufacture the missing information.
+The applet reports information available from its documented Linux sources. Data that is unavailable, restricted, or not reported by those sources remains explicitly unavailable rather than being inferred.
 
 ## Highlights
 
@@ -84,9 +84,19 @@ python -m pip install PyQt6 psutil
 python3 linspectacles_linux_resmon/standalone.py
 ```
 
-Linux commands, procfs/sysfs interfaces, system services, or optional helpers mentioned in **Data sources and acquisition** are applet-specific runtime inputs. A missing optional source is handled by the applet's existing availability/error path; it is not replaced here with an invented dependency or capability.
+Linux commands, procfs/sysfs interfaces, system services, or optional helpers mentioned in **Data sources and acquisition** are applet-specific runtime inputs. Data that is unavailable, restricted, or not reported by those sources remains explicitly unavailable rather than being inferred.
 
 No RPM installation instructions are included in this README.
+
+## LinSpectacles Hub
+
+This applet can run independently, but it can also be installed and used inside **[LinSpectacles Hub](https://github.com/linspectacles/linspectacles-hub)**.
+
+LinSpectacles Hub is the optional workbench for the LinSpectacles applet family. It provides shared applet discovery, navigation and management while each inspector remains independently runnable.
+
+To install a portable or user applet through the Hub, open **Configuration... → Applets** and add the applet ZIP. Once discovered, the applet can be enabled and opened from the Hub navigation.
+
+System-installed applets are discovered by the Hub from its system applet store and remain managed by the system package manager.
 
 ## Source layout and LinSpectacles integration
 
@@ -111,7 +121,7 @@ linspectacles_linux_resmon/
     └── ... applet-specific modules where present
 ```
 
-`applet.json` supplies the LinSpectacles applet identity and entrypoint metadata. `standalone.py` launches the applet directly, while the package's applet factory provides the host-loadable LinSpectacles integration used by the source.
+`applet.json` defines the applet's LinSpectacles identity and integration metadata. `standalone.py` provides direct standalone launching, while the applet entrypoint allows the same inspector to run inside LinSpectacles Hub.
 
 ## Configuration
 
@@ -128,6 +138,7 @@ GNU General Public License v3.0 or later. See [`LICENSE`](LICENSE).
 ## Links
 
 - LinSpectacles organisation: <https://github.com/linspectacles/>
+- LinSpectacles Hub: <https://github.com/linspectacles/linspectacles-hub>
 - Repository: <https://github.com/linspectacles/linux-resmon>
 - Issues: <https://github.com/linspectacles/linux-resmon/issues>
 
